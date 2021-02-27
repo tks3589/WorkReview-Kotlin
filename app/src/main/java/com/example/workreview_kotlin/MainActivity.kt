@@ -1,5 +1,9 @@
 package com.example.workreview_kotlin
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
@@ -12,19 +16,42 @@ import kotlin.Exception
 class MainActivity : AppCompatActivity() {
     private var membersArrayList: ArrayList<Member> = ArrayList()
     private var job: Job? = null
+    private var testService:Intent? = null
+
+    private val broadcastReceiver : BroadcastReceiver = object : BroadcastReceiver(){
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when(intent?.action){
+                TestService.ACTION_DONE -> {
+                    val data = intent?.getStringExtra("data")
+                    textView2.text = data
+                }
+            }
+        }
+
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val filter = IntentFilter()
+        filter.addAction(TestService.ACTION_DONE)
+        registerReceiver(broadcastReceiver,filter)
+
         job = CoroutineScope(Dispatchers.IO).launch{
             try {
                 val members = RetrofitHelper.instance.getMembers()
                 commonProcessJson(members)
+
                 val product = RetrofitHelper.instance.getProduct(membersArrayList[0].ename).await()
                 withContext(Dispatchers.Main){
                     textView.text = product
                 }
+
+                testService = Intent(this@MainActivity,TestService::class.java)
+                testService!!.putExtra("ename",membersArrayList[1].ename)
+                startService(testService)
+                textView2.text = "service working..."
             }catch (e:Exception){
                 Log.d("ee",e.toString())
             }
@@ -34,6 +61,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         job?.cancel()
+        stopService(testService)
+        unregisterReceiver(broadcastReceiver)
     }
 
     private fun commonProcessJson(data:String){
